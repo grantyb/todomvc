@@ -115,7 +115,7 @@
 	scope.$editTodoKeyPress = function(e) {
 		console.log("$editTodoKeyPress", e.which);
 		if (e.which === ENTER_KEY) {
-			this.$updateItem();
+			scope.$updateItem();
 		} else if (e.which === ESCAPE_KEY) {
 			this.editing = false;
 			scope.$.apply();
