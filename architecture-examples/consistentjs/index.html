@@ -13,13 +13,13 @@
 				<input id="new-todo" name="newTodo" ct-on-blur="addItem" ct-on-keypress="newTodoKeyPress" placeholder="What needs to be done?" autofocus>
 			</header>
 			<section id="main" ct-show="todos.length > 0">
-				<input id="toggle-all" ct-prop-checked="allTodosAreComplete ? 'checked' : ''" ct-on="completeAllTodos" type="checkbox">
+				<input id="toggle-all" ct="allTodosAreComplete" type="checkbox">
 				<label for="toggle-all">Mark all as complete</label>
-				<ul id="todo-list" ct-repeat="filteredTodos">
-					<li ct-class="modes">
+				<ul id="todo-list">
+					<li ct-repeat="filteredTodos" ct-class="modes">
 						<div class="view">
 							<input class="toggle" name="completed" type="checkbox">
-							<label ct="title" ct-on-dblclick="editing=true"></label>
+							<label ct="title" ct-on-dblclick="editItem"></label>
 							<button class="destroy" ct-on="removeItem"></button>
 						</div>
 						<input class="edit" name="editedTitle" ct-on-blur="updateItem" ct-on-keypress="editTodoKeyPress">

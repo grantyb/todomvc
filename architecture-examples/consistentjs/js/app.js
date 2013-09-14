@@ -4,30 +4,36 @@
 	var ENTER_KEY = 13;
 	var ESCAPE_KEY = 27;
 	var LOCAL_STORAGE_KEY = 'todos-consistent.js';
+	// Set up the Todo "class"
+	var Todo = function(opts) {
+		var todo = this;
+		todo.title = opts.title;
+		todo.editedTitle = opts.title;
+		todo.completed = opts.completed || false;
+		todo.editing = false;
+	};
+	Todo.prototype.modes = function() {
+		var result = []
+		if ( this.completed ) result.push("completed");
+		if ( this.editing ) result.push("editing");
+		console.log("Modes called for " + this.title,result);
+		return result;
+	};
 	
+	// Initialise Consistent.js on the main DOM element
 	var scope = $("#todoapp").consistent();
+	
 	// Set the default state
 	scope.todos = [];
 	scope.newTodo = "";
 	scope.filter = scope.filter || "all"; // In case there was no filter specified in the route
 	var savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{todos:[]}');
-	scope.todos = savedState.todos;
-	
-	// Set up the Todo "class"
-	var Todo = function(title, completed, editing) {
-		this.title = title;
-		this.editedTitle = title;
-		this.completed = completed || false;
-		this.editing = editing || false;
-		this.modes = function() {
-			var modes = []
-			if ( this.completed ) modes.push("completed");
-			if ( this.editing ) modes.push("editing");
-			return modes.join(" ");
-		};
-	};
+	for ( var i = 0; i < savedState.todos.length; i++ ) {
+		scope.todos.push(new Todo(savedState.todos[i]));
+	}
 	
 	scope.filteredTodos = function() {
+		console.log("filteredTodos");
 		if ( scope.filter === "completed" ) {
 			return scope.completedItems();
 		} else if ( scope.filter === "active" ) {
@@ -37,32 +43,54 @@
 		}
 	};
 	
-	scope.allTodosAreComplete = function() {
-		return scope.completedItems.length === scope.todos.length;
+	scope.allTodosAreComplete = function(checked) {
+		console.log("allTodosAreComplete");
+		var result = scope.completedItems().length === scope.todos.length;
+		if ( typeof checked === "undefined" ) {
+			return result;
+		} else {
+			var newState = !result;
+			for ( var i = 0; i < scope.todos.length; i++ ) {
+				scope.todos[i].completed = newState;
+				scope.todos[i].$.apply();
+			}
+			scope.$.apply();
+		}
 	};
 	
 	scope.completedItems = function() {
+		console.log("completedItems");
 		return $.grep(scope.todos, function(todo, i) {
 			return todo.completed;
 		});
 	};
 	
 	scope.activeItems = function() {
+		console.log("activeItems");
 		return $.grep(scope.todos, function(todo, i) {
 			return !todo.completed;
 		});
 	};
 	
 	scope.$addItem = function() {
+		console.log("$addItem");
 		var title = scope.newTodo.trim();
 		if ( title.length ) {
-			scope.todos.push(new Todo(title));
+			scope.todos.push(new Todo({title: title}));
 			scope.newTodo = "";
 			scope.$.apply();
 		}
 	};
 	
+	scope.$editItem = function(e) {
+		console.log("$editItem");
+		this.editing = true;
+		scope.$.apply();
+		$(e.target).closest("li").find(".edit").focus();
+	};
+	
 	scope.$updateItem = function() {
+		console.log("$updateItem");
 		var title = this.editedTitle.trim();
 		if ( title.length ) {
 			this.title = this.editedTitle;
@@ -74,12 +102,14 @@
 	};
 	
 	scope.$newTodoKeyPress = function(e) {
+		console.log("$newTodoKeyPress");
 		if (e.which === ENTER_KEY) {
 			this.$addItem();
 		}
 	};
 	
 	scope.$editTodoKeyPress = function(e) {
+		console.log("$editTodoKeyPress", e.which);
 		if (e.which === ENTER_KEY) {
 			this.$updateItem();
 		} else if (e.which === ESCAPE_KEY) {
@@ -89,21 +119,13 @@
 	};
 	
 	scope.$removeItem = function() {
+		console.log("$removeItem");
 		this.todos.splice(this.$.index,1);
 		this.$.apply();
 	};
 
-	scope.$completedAllTodos = function() {
-		var newState = !scope.allItemsAreComplete();
-		console.log("Setting all completed to " + newState);
-		for ( var i = 0; i < scope.todos.length; i++ ) {
-			console.log("Setting item " + i);
-			scope.todos[i].completed = newState;
-		}
-		scope.$.apply();
-	};
-
 	scope.$removeCompleted = function() {
+		console.log("$removeCompleted");
 		scope.todos = scope.activeItems();
 		scope.$.apply();
 	};
@@ -111,6 +133,7 @@
 	// Use the provided Flatiron Director for routing, since Consistent.js cares not one whit about routes.
 	Router({
 		'/:filter': function(filter) {
+			console.log("router : " + filter);
 			scope.filter = filter;
 			scope.$.apply();
 		}
