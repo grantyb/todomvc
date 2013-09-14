@@ -27,7 +27,7 @@
 	scope.todos = [];
 	scope.newTodo = "";
 	scope.filter = scope.filter || "all"; // In case there was no filter specified in the route
-	var savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{todos:[]}');
+	var savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{"todos":[]}');
 	for ( var i = 0; i < savedState.todos.length; i++ ) {
 		scope.todos.push(new Todo(savedState.todos[i]));
 	}
