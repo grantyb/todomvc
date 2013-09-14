@@ -20,8 +20,12 @@
 		return result;
 	};
 	
+	var scopeOptions = {
+		"autoListenToKeyEvents": false
+	};
+
 	// Initialise Consistent.js on the main DOM element
-	var scope = $("#todoapp").consistent();
+	var scope = $("#todoapp").consistent(scopeOptions);
 	
 	// Set the default state
 	scope.todos = [];
