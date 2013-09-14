@@ -108,7 +108,8 @@
 	scope.$newTodoKeyPress = function(e) {
 		console.log("$newTodoKeyPress");
 		if (e.which === ENTER_KEY) {
-			this.$addItem();
+			this.$.update();
+			scope.$addItem();
 		}
 	};
 	
