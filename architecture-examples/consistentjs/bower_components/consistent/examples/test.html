@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../bower_components/jquery/jquery.js"></script>
+<script src="../bower_components/hogan/web/builds/2.0.0/hogan-2.0.0.js"></script>
+<script src="../src/consistent.js"></script>
+<script src="../src/jquery.consistent.js"></script>
+<style type="text/css">
+p.world {
+	background: pink;
+}
+</style>
+</head>
+<body>
+<h1>Consistent.js</h1>
+
+<p id="aDomNode" class="consistent" ct="hello">My text changes.</p>
+<input type="text" name="hello" value="hello world" class="consistent">
+<input type="text" name="somethingElse" ct="hello" value="hello world" class="consistent">
+<textarea name="hello" class="consistent"></textarea>
+
+<p class="consistent" ct-attr-class="hello">My text doesn't change but my class does.</p>
+
+<!-- Templates -->
+<p class="consistent" ct-tmpl="{{hello}} {{world}}">My text changes, using a template.</p>
+<p class="consistent" ct-tmpl-attr-class="{{hello}} {{world}}">My text doesn't change but my class does, using a template.</p>
+
+<button id="action">Action</button>
+
+<!-- Binding -->
+<p class="consistent" ct-on-click="clickHandler">This paragraph is clickable. It has been clicked <span class="consistent" ct="clickCount">0</span> times.</p>
+<p>
+	<a class="consistent" href="fail" ct-on-click="clickHandler">Click to update the above too</a>
+</p>
+
+<!-- Undefined -->
+<p class="consistent" ct="undefinedKey">This text should not be changed to "undefined"</p>
+<p class="consistent" ct="nullKey">This text should be hidden as it is set to null</p>
+
+<!-- Template by id -->
+<p class="consistent" ct-tmpl-id="myTemplate">Text should have changed</p>
+<script id="myTemplate" type="text/x-hogan-template">
+	<strong>Template by id worked</strong>
+</script>
+<p class="consistent" ct-tmpl-id-attr-class="myClassTemplate">Should be pink when hello=world</p>
+<script id="myClassTemplate" type="text/x-hogan-template">{{hello}}</script>
+
+<div id="anInconsistentNode"></div>
+
+<!-- Possible new configuration styles:
+
+	Also allow specifying the configuration in Javascript when you do the binding, so you can take advantage of
+	selectors.
+
+<p class="consistent" data-cnst="innerHTML:hello, @class:hello, @class:'{{hello}}', bind-click:clickHandler">ok</p>
+<input class="consistent" type="text" name="whatever" data-cnst="value:hello">
+-->
+
+<script>
+$(function() {
+	var myScope = Consistent({ templateEngine: Hogan });
+	myScope.hello = "world";
+	myScope.world = "spoiler";
+	myScope.clickCount = 0;
+	myScope.nullKey = null;
+
+	var exp = myScope.$.snapshot();
+	var undefined;
+	if (exp.$ !== undefined || exp.hello !== "world") {
+		console.log("Snapshot faulty", exp);
+	}
+
+	myScope.$clickHandler = function(ev) {
+		myScope.clickCount++;
+		myScope.$.apply();
+		ev.preventDefault();
+	};
+
+	$('.consistent').consistent(myScope);
+	myScope.$.apply();
+
+	if (myScope !== $('.consistent').consistent()) {
+		console.log("Failed to find existing scope");
+	}
+
+	$('#action').click(function() {
+		myScope.hello = "cruel";
+		myScope.$.apply();
+	});
+
+	myScope.$.watch("hello", function(key, value, oldValue) {
+		if (value == "fade") {
+			$(myScope.$.nodes()).fadeOut();
+		} else {
+			$(myScope.$.nodes()).fadeIn();
+		}
+	});
+
+	if (Consistent(document.getElementById("aDomNode")).hello !== "world") {
+		console.log("Get scope for aDomNode failed");
+	}
+	if (Consistent(document.getElementById("anInconsistentNode")) !== null) {
+		console.log("Get scope for anInconsistentNode returned an unexpected result");
+	}
+});
+
+</script>
+
+</body>
+</html>

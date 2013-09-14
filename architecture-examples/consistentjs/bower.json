@@ -4,9 +4,7 @@
   "dependencies": {
     "todomvc-common": "~0.1.4",
     "director": "~1.1.9",
-    "consistent.js": "~0.9.3",
-    "consistent-expressions.js": "~0.9.3",
-    "jquery.consistent.js": "~0.9.3",
+    "consistent": "~0.9.3",
     "jquery": "~1.10.2"
   }
 }

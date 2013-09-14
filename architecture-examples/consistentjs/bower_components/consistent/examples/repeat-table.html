@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../bower_components/jquery/jquery.js"></script>
+<script src="../src/consistent.js"></script>
+<script src="../src/jquery.consistent.js"></script>
+</head>
+<body>
+<h1>Consistent.js</h1>
+
+<div id="container">
+	<h2 ct="title">Title</h2>
+	<table>
+		<tr ct-repeat="items" ct-repeat-container-id="rows"></tr>
+	</table>
+</div>
+
+<table style="display:none">
+	<tbody id="rows">
+		<tr>
+			<th ct="index"></th>
+			<td ct="name"></td>
+		</tr>
+		<tr>
+			<td></td>
+			<td ct="description"></td>
+		</tr>
+	</tbody>
+</table>
+
+<input type="text" id="name" value="Evan">
+<button id="add">Add</button>
+<button id="remove">Remove First</button>
+<button id="style">Style</button>
+<button id="shuffle">Shuffle</button>
+
+<script>
+$(function() {
+	var scope = $("#container").consistent();
+	scope.index = function() {
+		/* Note that although this function is defined on the scope in the scope variable.
+		 * This is set to the child scope when the value function is evaluated.
+		 * The $.index property is a special property that Consistent sets on scopes representing
+		 * a repeated block.
+		 */
+		return this.$.index + 1;
+	};
+	scope.items = [
+		{ name: "Albert", description: randomDescription() },
+		{ name: "Bob", description: randomDescription() },
+		{ name: "Carl", description: randomDescription() },
+		{ name: "Donald", description: randomDescription() }
+	];
+
+	scope.$.apply();
+
+	$("#add").click(function() {
+		scope.$.apply(function() {
+			this.items.push({ name: $("#name").val(), description: randomDescription() });
+		});
+	});
+	$("#remove").click(function() {
+		scope.$.apply(function() {
+			this.items.splice(0, 1);
+		});
+	});
+
+	var colors = [ "red", "green", "blue", "yellow", "magenta", "orange" ];
+	$("#style").click(function() {
+		$("#container tr").each(function() {
+			this.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+		});
+	});
+
+	$("#shuffle").click(function() {
+		scope.$.apply(function() {
+			shuffle(this.items);
+		});
+	});
+
+	/* Helper functions */
+
+	//+ Jonas Raoni Soares Silva
+	//@ http://jsfromhell.com/array/shuffle [v1.0]
+	function shuffle(o){ //v1.0
+	    for(var j, x, i = o.length; i; j = Math.floor(Math.random() * i), x = o[--i], o[i] = o[j], o[j] = x);
+	    return o;
+	}
+
+	function randomDescription() {
+		return "Lorem ipsum " + Math.random();
+	}
+});
+</script>
+
+</body>
+</html>

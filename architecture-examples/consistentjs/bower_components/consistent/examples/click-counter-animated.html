@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<!--
+Example extending click-counter.html with custom show and hide functions to perform animation when using ct-show.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<script src="../bower_components/jquery/jquery.js"></script>
+<script src="../src/consistent.js"></script>
+<script src="../src/jquery.consistent.js"></script>
+</head>
+<body>
+<h1>Consistent.js</h1>
+<p>An example based on <a href="http://knockoutjs.com/examples/clickCounter.html">the Knockout.js click counter example</a>.</p>
+
+<div id="container">
+	<div>You’ve clicked <span ct="numberOfClicks">&nbsp;</span> times</div>
+	<button ct-on="registerClick" ct-disabled="hasClickedTooManyTimes">Click me</button>
+	<div ct-show="hasClickedTooManyTimes">
+	    That’s too many clicks! Please stop before you wear out your fingers.
+	    <button ct-on="resetClicks">Reset clicks</button>
+	</div>
+</div>
+
+<script>
+$(function() {
+	/* Because we hide the tooManyClicks div when we first apply, we sometimes don't want to fade,
+	 * we just want to show and hide immediately. This variable is used by our custom show/hide
+	 * implementations below. We change it to false after the first apply.
+	 */
+	var dontFade = true;
+
+	/* Create the scope with options overriding the show and hide functions. We use jQuery functions
+	 * to do the showing and hiding instead of the built-in Consistent implementations.
+	 */
+	var scope = $("#container").consistent({
+		$: {
+			hide: function(dom) {
+				if (dontFade) {
+					$(dom).hide();
+				} else {
+					$(dom).fadeOut(1000);
+				}
+			},
+			show: function(dom) {
+				if (dontFade) {
+					$(dom).show();
+				} else {
+					$(dom).fadeIn(1000);
+				}
+			}
+		}
+	});
+
+	scope.$.apply(function() {
+		this.numberOfClicks = 0;
+
+		this.hasClickedTooManyTimes = function() {
+			return this.numberOfClicks >= 3;
+		};
+
+		this.$registerClick = function(ev, dom) {
+			this.$.apply(function() {
+				this.numberOfClicks++;
+			});
+		};
+
+		this.$resetClicks = function(ev, dom) {
+			this.$.apply(function() {
+				this.numberOfClicks = 0;
+			});
+		};
+	});
+
+	dontFade = false;
+});
+
+</script>
+
+</body>
+</html>

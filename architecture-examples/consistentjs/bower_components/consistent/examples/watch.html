@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../bower_components/jquery/jquery.js"></script>
+<script src="../src/consistent.js"></script>
+<script src="../src/jquery.consistent.js"></script>
+</head>
+<body>
+<h1>Consistent.js</h1>
+
+<div id="container">
+	<h2 ct="title">My title</h2>
+	<h3 ct="subtitle">Subtitle</h3>
+	<p ct="status"></p>
+</div>
+
+<button id="change">Change</button>
+
+<script>
+$(function() {
+	var scope = $('#container').consistent();
+
+	/* Watch all scope changes */
+	scope.$.watch(function(keys, snapshot, oldSnapshot) {
+		this.status = "Changed " + keys;
+	});
+
+	scope.$.update().$.apply();
+
+	$("#change").click(function() {
+		scope.$.apply(function() {
+			if (Math.random() < 0.5) {
+				this.title = "Random title " + Math.random();
+			}
+			if (Math.random() < 0.5) {
+				this.subtitle = "Another random subtitle " + Math.random();
+			}
+		});
+	});
+});
+</script>
+
+<hr>
+
+<div id="container2">
+	<h2 ct="title">My title</h2>
+	<p ct="status"></p>
+</div>
+
+<button id="change2">Change</button>
+
+<script>
+$(function() {
+	var scope = $("#container2").consistent();
+
+	/* Watch all scope changes */
+	scope.$.watch(function(keys, snapshot, oldSnapshot) {
+		this.status = "Changed " + keys;
+	});
+
+	var counter = 0;
+	scope.title = function() {
+		return "Random title " + counter;
+	};
+	scope.title.ignore = true;
+
+	$("#change2").click(function() {
+		counter++;
+		scope.$.apply();
+	});
+
+	scope.$.apply();
+});
+</script>
+
+</body>
+</html>

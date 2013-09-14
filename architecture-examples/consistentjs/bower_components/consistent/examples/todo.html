@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../bower_components/jquery/jquery.js"></script>
+<script src="../bower_components/hogan/web/builds/2.0.0/hogan-2.0.0.js"></script>
+<script src="../src/consistent.js"></script>
+<script src="../src/jquery.consistent.js"></script>
+<style type="text/css">
+.done-true {
+  text-decoration: line-through;
+  color: grey;
+}
+</style>
+</head>
+<body>
+	<p>Todo example based upon the <a href="http://angularjs.org">Angular example</a>.</p>
+
+	<h2>Todo</h2>
+	<div id="todo">
+		<span ct-tmpl="{{remaining}} of {{todos.length}} remaining"></span>
+		[ <a href="#" ct-on="archive">archive</a> ]
+		<ul class="unstyled">
+			<li ct-repeat="todos">
+				<input type="checkbox" name="done">
+				<span ct="text" ct-tmpl-attr-class="done-{{done}}"></span>
+			</li>
+		</ul>
+		<form ct-on="addTodo">
+			<input type="text" ct="todoText" size="30" placeholder="add new todo here">
+			<input type="submit" value="add">
+		</form>
+	</div>
+
+<script>
+$(function() {
+	Consistent.defaultOptions.templateEngine = Hogan;
+
+	var scope = $("#todo").consistent();
+	scope.todos = [
+		{ text: "learn consistent", done: true },
+		{ text: "build a consistent app", done: false }
+	];
+	scope.$addTodo = function(ev) {
+		scope.$.apply(function() {
+			scope.todos.push({ text: scope.todoText, done: false });
+			scope.todoText = "";
+		});
+		ev.preventDefault();
+	};
+	scope.remaining = function() {
+		var count = 0;
+		for (var i = 0; i < scope.todos.length; i++) {
+			count += scope.todos[i].done ? 0 : 1;
+		}
+		return count;
+	};
+	scope.$archive = function(ev) {
+		scope.$.apply(function() {
+			var oldTodos = scope.todos;
+			scope.todos = [];
+			for (var i = 0; i < scope.todos.length; i++) {
+				if (!scope.todos[i].done) {
+					scope.todos.push(scope.todos[i]);
+				}
+			}
+		});
+		ev.preventDefault();
+	};
+	scope.$.apply();
+});
+</script>
+</body>
+</html>
