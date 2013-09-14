@@ -105,18 +105,18 @@
 		scope.$.apply();
 	};
 	
-	scope.$newTodoKeyPress = function(e) {
+	scope.$newTodoKeyPress = function(e, dom) {
 		console.log("$newTodoKeyPress");
 		if (e.which === ENTER_KEY) {
-			this.$.update();
+			this.$.update(dom);
 			scope.$addItem();
 		}
 	};
 	
-	scope.$editTodoKeyPress = function(e) {
+	scope.$editTodoKeyPress = function(e, dom) {
 		console.log("$editTodoKeyPress", e.which);
 		if (e.which === ENTER_KEY) {
-			scope.$updateItem();
+			this.$.update(dom);
 		} else if (e.which === ESCAPE_KEY) {
 			this.editing = false;
 			scope.$.apply();
