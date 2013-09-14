@@ -3,7 +3,10 @@
   "version": "0.0.0",
   "dependencies": {
     "todomvc-common": "~0.1.4",
-    "consistent.js": "~0.8.0",
-    "jquery": "~1.10.2"
+    "consistent.js": "~0.9.3",
+    "consistent-expressions.js": "~0.9.3",
+    "jquery.consistent.js": "~0.9.3",
+    "jquery": "~1.10.2",
+    "hogan.js": "~2.0.0"
   }
 }

@@ -10,40 +10,37 @@
 		<section id="todoapp">
 			<header id="header">
 				<h1>todos</h1>
-				<input id="new-todo" name="newTodo" ct-on="add" placeholder="What needs to be done?" autofocus>
+				<input id="new-todo" name="newTodo" ct-on-blur="addItem" ct-on-keypress="newTodoKeyPress" placeholder="What needs to be done?" autofocus>
 			</header>
-			<section id="main" ct-show="notEmpty">
-				<input id="toggle-all" ct-on="allCompleted" type="checkbox">
+			<section id="main" ct-show="todos.length > 0">
+				<input id="toggle-all" ct-prop-checked="allTodosAreComplete ? 'checked' : ''" ct-on="completeAllTodos" type="checkbox">
 				<label for="toggle-all">Mark all as complete</label>
 				<ul id="todo-list" ct-repeat="filteredTodos">
 					<li ct-class="modes">
 						<div class="view">
 							<input class="toggle" name="completed" type="checkbox">
-							<label ct="title" ct-on-dblclick="editItem"></label>
-							<button class="destroy" ct-on"removeItem"></button>
+							<label ct="title" ct-on-dblclick="editing=true"></label>
+							<button class="destroy" ct-on="removeItem"></button>
 						</div>
-						<input class="edit" data-bind="value: title, valueUpdate: 'afterkeydown', enterKey: $root.stopEditing, selectAndFocus: editing, event: { blur: $root.stopEditing }">
+						<input class="edit" name="editedTitle" ct-on-blur="updateItem" ct-on-keypress="editTodoKeyPress">
 					</li>
 				</ul>
 			</section>
-			<footer id="footer" data-bind="visible: completedCount() || remainingCount()">
-				<span id="todo-count">
-					<strong data-bind="text: remainingCount">0</strong>
-					<span data-bind="text: getLabel( remainingCount )"></span> left
-				</span>
+			<footer id="footer" ct-show="todos.length > 0">
+				<span id="todo-count"><strong ct="activeItems.length"></strong> item<span ct-show="activeItems.length ne 1">s</span></span>
 				<ul id="filters">
 					<li>
-						<a data-bind="css: { selected: showMode() == 'all' }" href="#/all">All</a>
+						<a ct-class="filter == 'all' ? 'selected' : ''" href="#/all">All</a>
 					</li>
 					<li>
-						<a data-bind="css: { selected: showMode() == 'active' }" href="#/active">Active</a>
+						<a ct-class="filter == 'active' ? 'selected' : ''" href="#/active">Active</a>
 					</li>
 					<li>
-						<a data-bind="css: { selected: showMode() == 'completed' }" href="#/completed">Completed</a>
+						<a ct-class="filter == 'completed' ? 'selected' : ''" href="#/completed">Completed</a>
 					</li>
 				</ul>
-				<button id="clear-completed" data-bind="visible: completedCount, click: removeCompleted">
-					Clear completed (<span data-bind="text: completedCount"></span>)
+				<button id="clear-completed" ct-hide="completedItems.length === 0" ct-on="removeCompleted">
+					Clear completed (<span ct="completedItems.length"></span>)
 				</button>
 			</footer>
 		</section>
@@ -54,8 +51,11 @@
 		</footer>
 		<script src="bower_components/todomvc-common/base.js"></script>
 		<script src="bower_components/jquery/jquery-1.10.2.min.js"></script>
-		<script src="bower_components/consistent.js/jquery.consistent.js"></script>
+    <script src="bower_components/hogan/hogan-2.0.0.js"></script>
+    <script src="bower_components/director/director.js"></script>
 		<script src="bower_components/consistent.js/consistent.js"></script>
+		<script src="bower_components/consistent.js/consistent-expressions.js"></script>
+		<script src="bower_components/consistent.js/jquery.consistent.js"></script>
 		<script src="js/app.js"></script>
 	</body>
 </html>

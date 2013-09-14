@@ -1,5 +1,5 @@
 /*!
- * Consistent.js 0.8
+ * Consistent.js 0.9.3
  * @author Karl von Randow
  * @license Apache License, Version 2.0
  */
@@ -51,6 +51,8 @@
 			} else if (typeof arg0 === "object") {
 				/* Options only */
 				return Consistent.createScope(null, arg0);
+			} else if (typeof arg0 === "string") {
+				return Consistent.findScopeByName(arg0);
 			} else {
 				throw exception("Unexpected argument to Consistent(): " + arg0);
 			}
@@ -61,6 +63,7 @@
 	};
 
 	var scopeManagers = {};
+	var scopeManagersByName = {};
 	var SCOPE_TYPE = "ConsistentScope";
 
 	var support = (function() {
@@ -102,11 +105,16 @@
 				classAttribute: [ "data-ct-class", "ct-class" ],
 				classAddAttribute: [ "data-ct-add-class", "ct-add-class" ],
 
-				on: [ "data-ct-on", "ct-on", /* Legacy */, "data-ct-bind", "ct-bind" ],
-				onPrefix: [ "data-ct-on-", "ct-on-", /* Legacy */, "data-ct-bind-", "ct-bind-" ],
+				on: [ "data-ct-on", "ct-on" ],
+				onPrefix: [ "data-ct-on-", "ct-on-" ],
 
 				repeat: [ "data-ct-repeat", "ct-repeat" ],
 				repeatContainerId: [ "data-ct-repeat-container-id", "ct-repeat-container-id" ],
+
+				noBind: [ "data-ct-nobind", "ct-nobind" ],
+				scope: [ "data-ct-scope", "ct-scope" ],
+				init: [ "data-ct-init", "ct-init" ],
+				initFunc: [ "data-ct-init-func", "ct-init-func" ],
 
 				warningPrefix: [ "data-ct-", "ct-" ]
 			},
@@ -116,7 +124,8 @@
 			oldDisplayKey: "__ConsistentOldDisplay",
 			addedClassesKey: "__ConsistentAddedClasses",
 
-			maxWatcherLoops: 100
+			maxWatcherLoops: 100,
+			autoCreateScopes: true
 		},
 
 		isScope: function(object) {
@@ -129,7 +138,106 @@
 
 			var scopeManager = new ConsistentScopeManager(parentScope, options);
 			scopeManagers[scopeManager._id] = scopeManager;
+			if (scopeManager._name) {
+				scopeManagersByName[scopeManager._name] = scopeManager;
+			}
 			return scopeManager._scope;
+		},
+
+		autoCreateScopes: function() {
+			var root = document;
+			var declarationAttributes = Consistent.settings.attributes.scope;
+			var initDeclarationAttributes = Consistent.settings.attributes.init;
+			var initFuncDeclarationAttributes = Consistent.settings.attributes.initFunc;
+			var n = declarationAttributes.length;
+			var o = initDeclarationAttributes.length;
+			var p = initFuncDeclarationAttributes.length;
+
+			visit(root);
+
+			function visit(dom) {
+				var scopeName;
+				var i;
+				if (dom.getAttribute) {
+					for (i = 0; i < n; i++) {
+						scopeName = dom.getAttribute(declarationAttributes[i]);
+						if (typeof scopeName === "string") {
+							break;
+						}
+					}
+				}
+				if (typeof scopeName === "string") {
+					var scope = Consistent.createScope(null, scopeName ? { name: scopeName } : null);
+					scope.$.bind(dom);
+
+					var initHandled = false;
+					var func;
+					for (i = 0; i < o; i++) {
+						var initValue = dom.getAttribute(initDeclarationAttributes[i]);
+						if (initValue) {
+							if (initValue === "update") {
+								/* Fall through and do the default behaviour */
+								break;
+							} else if (initValue === "none") {
+								initHandled = true;
+								break;
+							} else if (initValue) {
+								/* If the string isn't empty then we evaluate it as a function */
+								initHandled = true;
+								func = Consistent.statementToFunction(initValue);
+								evaluateStatement(func, scope);
+								scope.$.apply();
+								break;
+							}
+						}
+					}
+
+					if (!initHandled) {
+						for (i = 0; i < p; i++) {
+							var initFuncValue = dom.getAttribute(initFuncDeclarationAttributes[i]);
+							if (initFuncValue) {
+								func = getNestedProperty(window, initFuncValue);
+								if (func) {
+									func.call(scope);
+								} else {
+									throw exception("Consistent scope init function attribute referenced a function that was not found: " + initFuncValue);
+								}
+							}
+						}
+					}
+
+					if (!initHandled) {
+						scope.$.update();
+						scope.$.apply();
+					}
+				} else {
+					var child = dom.firstChild;
+					while (child !== null) {
+						if (child.nodeType === 1) {
+							visit(child);
+						}
+						child = child.nextSibling;
+					}
+				}
+			}
+		},
+
+		destroyScope: function(scope) {
+			var scopeManager = scope.$._manager();
+			scopeManager.destroy();
+			delete scopeManagers[scopeManager._id];
+			if (scopeManager._name) {
+				delete scopeManagersByName[scopeManager._name];
+			}
+		},
+
+		findScope: function(name) {
+			var scopeManager = scopeManagersByName[name];
+			if (scopeManager) {
+				return scopeManager._scope;
+			} else {
+				return null;
+			}
 		},
 
 		/** Returns the scope for the given DOM node, or null */
@@ -140,6 +248,14 @@
 			} else {
 				return null;
 			}
+		},
+
+		expressionToFunction: function(value) {
+			throw exception("Expression support requires consistent-expressions.js");
+		},
+
+		statementToFunction: function(value) {
+			throw exception("Expression support requires consistent-expressions.js");
 		},
 
 		merge: merge
@@ -289,9 +405,32 @@
 		var current = object;
 		var i;
 		for (i = 0; i < parts.length && current !== undefined && current !== null; i++) {
+			if (parts[i] === "constructor") {
+				/* Expression security; don't allow to access constructors which can be
+				 * used to execute arbitrary code. Based on expression security in Angular:
+				 * https://github.com/angular/angular.js/blob/master/src/ng/parse.js
+				 */
+				throw exception("Illegal attempt to access 'constructor' keyword for property: " + property);
+			}
+			if (current && current.constructor === current) {
+				/* Expression security; don't allow access to the Function constructor which
+				 * can be used to execute arbitrary code. Based on expression security in Angular:
+				 * https://github.com/angular/angular.js/blob/master/src/ng/parse.js
+				 * This is their nifty check if the object is Function.
+				 */
+				throw exception("Illegal attempt to access Function constructor for property: " + property);
+			}
 			current = current[parts[i]];
 		}
 		if (i === parts.length) {
+			if (current && current.constructor === current) {
+				/* Expression security; don't allow access to the Function constructor which
+				 * can be used to execute arbitrary code. Based on expression security in Angular:
+				 * https://github.com/angular/angular.js/blob/master/src/ng/parse.js
+				 * This is their nifty check if the object is Function.
+				 */
+				throw exception("Illegal attempt to access Function constructor for property: " + property);
+			}
 			return current;
 		} else {
 			return undefined;
@@ -335,6 +474,25 @@
 		return optionValue;
 	}
 
+	function evaluateExpression(func, snapshot) {
+		return func({
+			"get": function(name) {
+				return getNestedProperty(snapshot, name);
+			}
+		});
+	}
+
+	function evaluateStatement(func, scope) {
+		return func({
+			"get": function(name) {
+				return scope.$.get(name);
+			},
+			"set": function(name, value) {
+				return scope.$.set(name, value);
+			}
+		});
+	}
+
 	/**
 	  * Default options for Consistent.js. This includes the "$" key which contains the functionality used to apply
 	  * the scope to the DOM.
@@ -343,6 +501,7 @@
 
 		templateEngine: null,
 		autoListenToChange: true,
+		autoListenToKeyEvents: true,
 		eventHandlerPrefix: "$",
 		valueFunctionPrefix: "",
 
@@ -363,6 +522,9 @@
 					 */
 					value = getNestedProperty(snapshot, bindings.selectOptions);
 					if (value !== undefined) {
+						if (!value) {
+							value = [];
+						}
 						var selectedValue = dom.selectedIndex !== -1 ? inputOptionValue(dom.options[dom.selectedIndex]) : undefined;
 						dom.length = value.length;
 						for (i = 0; i < value.length; i++) {
@@ -390,7 +552,7 @@
 				/* Value */
 				if (bindings.key) {
 					/* Key */
-					value = getNestedProperty(snapshot, bindings.key);
+					value = getPropertyOrEvaluateExpression(bindings.key);
 					if (value !== undefined) {
 						this.setValue(dom, value);
 					}
@@ -404,7 +566,7 @@
 					var attrs = bindings.attributes;
 					for (i = 0; i < attrs.length; i++) {
 						if (attrs[i].key !== undefined) {
-							value = getNestedProperty(snapshot, attrs[i].key);
+							value = getPropertyOrEvaluateExpression(attrs[i].key);
 						} else if (attrs[i].template !== undefined) {
 							value = attrs[i].template.render(snapshot);
 						} else {
@@ -430,7 +592,7 @@
 					}
 				}
 				if (bindings.classAttribute) {
-					value = getNestedProperty(snapshot, bindings.classAttribute);
+					value = getPropertyOrEvaluateExpression(bindings.classAttribute);
 					if (value !== undefined) {
 						if (isArray(value)) {
 							value = value.join(" ");
@@ -439,7 +601,7 @@
 					}
 				}
 				if (bindings.classAddAttribute) {
-					value = getNestedProperty(snapshot, bindings.classAddAttribute);
+					value = getPropertyOrEvaluateExpression(bindings.classAddAttribute);
 					if (value !== undefined)  {
 						this.addRemoveClasses(dom, value);
 					}
@@ -449,7 +611,7 @@
 				if (bindings.properties) {
 					var props = bindings.properties;
 					for (i = 0; i < props.length; i++) {
-						value = getNestedProperty(snapshot, props[i].key);
+						value = getPropertyOrEvaluateExpression(props[i].key);
 						if (value !== undefined) {
 							this.setPropertyValue(dom, props[i].name, value);
 						}
@@ -468,7 +630,7 @@
 
 				/* Visibility */
 				if (bindings.show) {
-					value = getNestedProperty(snapshot, bindings.show);
+					value = getPropertyOrEvaluateExpression(bindings.show);
 					if (value !== undefined) {
 						if (value) {
 							this.show(dom);
@@ -478,7 +640,7 @@
 					}
 				}
 				if (bindings.hide) {
-					value = getNestedProperty(snapshot, bindings.hide);
+					value = getPropertyOrEvaluateExpression(bindings.hide);
 					if (value !== undefined) {
 						if (!value) {
 							this.show(dom);
@@ -490,13 +652,13 @@
 
 				/* Enabled / disabled */
 				if (bindings.enabled) {
-					value = getNestedProperty(snapshot, bindings.enabled);
+					value = getPropertyOrEvaluateExpression(bindings.enabled);
 					if (value !== undefined) {
 						this.setPropertyValue(dom, "disabled", !value);
 					}
 				}
 				if (bindings.disabled) {
-					value = getNestedProperty(snapshot, bindings.disabled);
+					value = getPropertyOrEvaluateExpression(bindings.disabled);
 					if (value !== undefined) {
 						this.setPropertyValue(dom, "disabled", !!value);
 					}
@@ -504,15 +666,23 @@
 
 				/* Read only */
 				if (bindings.readOnly) {
-					value = getNestedProperty(snapshot, bindings.readOnly);
+					value = getPropertyOrEvaluateExpression(bindings.readOnly);
 					if (value !== undefined) {
 						this.setPropertyValue(dom, "readOnly", !!value);
 					}
 				}
 				if (bindings.readWrite) {
-					value = getNestedProperty(snapshot, bindings.readWrite);
+					value = getPropertyOrEvaluateExpression(bindings.readWrite);
 					if (value !== undefined) {
 						this.setPropertyValue(dom, "readOnly", !value);
+					}
+				}
+
+				function getPropertyOrEvaluateExpression(propertyOrExpression) {
+					if (typeof propertyOrExpression === "function") {
+						return evaluateExpression(propertyOrExpression, snapshot);
+					} else {
+						return getNestedProperty(snapshot, propertyOrExpression);
 					}
 				}
 			},
@@ -596,8 +766,24 @@
 				var value, i;
 				var bindings = options.bindings;
 
+				/* Select options */
+				if (updatableBinding(bindings.selectOptions)) {
+					var selectOptions = dom.options;
+					value = [];
+					for (i = 0; i < selectOptions.length; i++) {
+						var option = selectOptions[i];
+						value.push({
+							"text": option.text,
+							"value": option.value,
+							"label": option.label,
+							"disabled": option.disabled
+						});
+					}
+					scope.$.set(bindings.selectOptions, value);
+				}
+
 				/* Value */
-				if (bindings.key) {
+				if (updatableBinding(bindings.key)) {
 					value = this.getValue(dom);
 					if (value !== undefined) {
 						if (dom.nodeName === "INPUT" && dom.type === "checkbox") {
@@ -640,7 +826,7 @@
 				}
 
 				/* Attributes */
-				if (bindings.attributes) {
+				if (updatableBinding(bindings.attributes)) {
 					var attrs = bindings.attributes;
 					for (i = 0; i < attrs.length; i++) {
 						if (attrs[i].key !== undefined) {
@@ -649,7 +835,7 @@
 						}
 					}
 				}
-				if (bindings.allAttributes) {
+				if (updatableBinding(bindings.allAttributes)) {
 					value = scope.$.get(bindings.allAttributes);
 					if (value !== undefined) {
 						for (i in value) {
@@ -658,7 +844,7 @@
 						scope.$.set(bindings.allAttributes, value);
 					}
 				}
-				if (bindings.classAttribute) {
+				if (updatableBinding(bindings.classAttribute)) {
 					value = this.getAttributeValue(dom, "class");
 					if (isArray(scope.$.get(bindings.classAttribute))) {
 						/* Convert to array */
@@ -668,14 +854,14 @@
 				}
 
 				/* Properties */
-				if (bindings.properties) {
+				if (updatableBinding(bindings.properties)) {
 					var props = bindings.properties;
 					for (i = 0; i < props.length; i++) {
 						value = this.getPropertyValue(dom, props[i].name);
 						scope.$.set(props[i].key, value);
 					}
 				}
-				if (bindings.allProperties) {
+				if (updatableBinding(bindings.allProperties)) {
 					value = scope.$.get(bindings.allProperties);
 					if (value !== undefined) {
 						var names = getNestedPropertyNames(value);
@@ -687,33 +873,42 @@
 				}
 
 				/* Visibility */
-				if (bindings.show) {
+				if (updatableBinding(bindings.show)) {
 					value = this.isShowing(dom);
 					scope.$.set(bindings.show, value);
 				}
-				if (bindings.hide) {
+				if (updatableBinding(bindings.hide)) {
 					value = this.isShowing(dom);
 					scope.$.set(bindings.hide, !value);
 				}
 
 				/* Enabled / disabled */
-				if (bindings.enabled) {
+				if (updatableBinding(bindings.enabled)) {
 					value = this.getPropertyValue(dom, "disabled");
 					scope.$.set(bindings.enabled, !value);
 				}
-				if (bindings.disabled) {
+				if (updatableBinding(bindings.disabled)) {
 					value = this.getPropertyValue(dom, "disabled");
 					scope.$.set(bindings.disabled, value);
 				}
 
 				/* Read only */
-				if (bindings.readOnly) {
+				if (updatableBinding(bindings.readOnly)) {
 					value = this.getPropertyValue(dom, "readOnly");
 					scope.$.set(bindings.readOnly, value);
 				}
-				if (bindings.readWrite) {
+				if (updatableBinding(bindings.readWrite)) {
 					value = this.getPropertyValue(dom, "readOnly");
 					scope.$.set(bindings.readWrite, !value);
+				}
+
+				function updatableBinding(binding) {
+					/* Check if the given binding exists, and is not a function.
+					 * If it's a function, it's an expression. We cannot update
+					 * the scope from the DOM through a function as we do not
+					 * have a way to invert functions.
+					 */
+					return (binding && typeof binding !== "function");
 				}
 			},
 
@@ -877,19 +1072,26 @@
 		var attrs = dom.attributes;
 		for (var i = 0; i < attrs.length; i++) {
 			var name = attrs[i].name;
-			var value = attrs[i].value;
 
 			var matched = findDeclarationAttribute(name);
 			if (matched) {
+				var value = trim(attrs[i].value);
+				if (!value && (matched.name !== "noBind")) {
+					/* If the value is empty and the match doesn't support that,
+					 * then ignore this declaration.
+					 */
+					continue;
+				}
+
 				switch (matched.name) {
 					case "key": {
 						/* Body */
-						bindings.key = value;
+						bindings.key = propertyNameOrExpression(value);
 						break;
 					}
 					case "attributePrefix": {
 						/* Attribute */
-						addAttribute(matched.suffix, value);
+						addAttribute(matched.suffix, propertyNameOrExpression(value));
 						break;
 					}
 					case "attributes": {
@@ -923,7 +1125,7 @@
 					}
 					case "propertyPrefix": {
 						/* Property */
-						addProperty(matched.suffix.replace(/-/g, "."), value);
+						addProperty(matched.suffix.replace(/-/g, "."), propertyNameOrExpression(value));
 						break;
 					}
 					case "properties": {
@@ -932,22 +1134,22 @@
 					}
 					case "on": {
 						/* Bind default event */
-						addEvent(defaultEventName(dom), value);
+						addEvent(defaultEventName(dom), handlerNameOrStatement(value));
 						break;
 					}
 					case "onPrefix": {
 						/* Bind events */
-						addEvent(matched.suffix.toLowerCase(), value);
+						addEvent(matched.suffix.toLowerCase(), handlerNameOrStatement(value));
 						break;
 					}
 					case "show": {
 						/* Show */
-						bindings.show = value;
+						bindings.show = propertyNameOrExpression(value);
 						break;
 					}
 					case "hide": {
 						/* Hide */
-						bindings.hide = value;
+						bindings.hide = propertyNameOrExpression(value);
 						break;
 					}
 					case "repeat": {
@@ -962,22 +1164,22 @@
 					}
 					case "enabled": {
 						/* Enabled */
-						bindings.enabled = value;
+						bindings.enabled = propertyNameOrExpression(value);
 						break;
 					}
 					case "disabled": {
 						/* Disabled */
-						bindings.disabled = value;
+						bindings.disabled = propertyNameOrExpression(value);
 						break;
 					}
 					case "readOnly": {
 						/* Read Only */
-						bindings.readOnly = value;
+						bindings.readOnly = propertyNameOrExpression(value);
 						break;
 					}
 					case "readWrite": {
 						/* Read Write */
-						bindings.readWrite = value;
+						bindings.readWrite = propertyNameOrExpression(value);
 						break;
 					}
 					case "options": {
@@ -986,11 +1188,21 @@
 						break;
 					}
 					case "classAttribute": {
-						bindings.classAttribute = value;
+						bindings.classAttribute = propertyNameOrExpression(value);
 						break;
 					}
 					case "classAddAttribute": {
-						bindings.classAddAttribute = value;
+						bindings.classAddAttribute = propertyNameOrExpression(value);
+						break;
+					}
+					case "noBind": {
+						bindings.noBind = (!value || value === "true");
+						break;
+					}
+					case "scope": 
+					case "init":
+					case "initFunc": {
+						/* NOOP, this is used in autoCreateScopes */
 						break;
 					}
 					case "warningPrefix": {
@@ -1016,7 +1228,8 @@
 			for (var declAttr in settings.attributes) {
 				var attributes = settings.attributes[declAttr];
 				var i;
-				if (declAttr.lastIndexOf("Prefix") === declAttr.length - "Prefix".length) {
+				var foundPrefix = declAttr.lastIndexOf("Prefix");
+				if (foundPrefix !== -1 && foundPrefix === declAttr.length - "Prefix".length) {
 					if (isArray(attributes)) {
 						for (i = 0; i < attributes.length; i++) {
 							if (name.indexOf(attributes[i]) === 0) {
@@ -1109,6 +1322,32 @@
 				return "submit";
 			} else {
 				return "click";
+			}
+		}
+
+		function trim(str) {
+			return str.replace(/^\s*(.*)\s*$/, "$1");
+		}
+
+		function isPropertyName(str) {
+			return str.match(/^[a-zA-Z_$][a-zA-Z_$0-9\.]*$/);
+		}
+
+		function propertyNameOrExpression(value) {
+			/* Determine whether this is a plain property name or an expression */
+			if (isPropertyName(value)) {
+				return value;
+			} else {
+				return Consistent.expressionToFunction(value);
+			}
+		}
+
+		function handlerNameOrStatement(value) {
+			/* Determine whether this is a plain property name or a statement */
+			if (isPropertyName(value)) {
+				return value;
+			} else {
+				return Consistent.statementToFunction(value);
 			}
 		}
 
@@ -1368,6 +1607,13 @@
 				if (includeParents !== undefined && typeof includeParents !== "boolean") {
 					throw exception("Invalid type for includeParents: " + typeof includeParents);
 				}
+				if (key === "$" || key.substring(0, 2) === "$.") {
+					/* Do not allow access to $ object via get. The $ object is not part
+					 * of the model of the scope. This also prevents expression statements
+					 * from accessing scope functions.
+					 */
+					return undefined;
+				}
 
 				var valueFunctionPrefix = this.options().valueFunctionPrefix;
 				var scope = this._scope();
@@ -1379,11 +1625,21 @@
 					} else {
 						return value;
 					}
-				} else if (valueFunctionPrefix) {
-					var prefixedPropertyName = addPrefixToPropertyName(key, valueFunctionPrefix);
+				} else {
+					var prefixedPropertyName;
+					if (valueFunctionPrefix) {
+						prefixedPropertyName = addPrefixToPropertyName(key, valueFunctionPrefix);
+						value = getNestedProperty(scope, prefixedPropertyName);
+						if (typeof value === "function") {
+							return value.call(scope);
+						}
+					}
+
+					/* If it matches an event handler, simply return it */
+					prefixedPropertyName = addPrefixToPropertyName(key, this.options().eventHandlerPrefix);
 					value = getNestedProperty(scope, prefixedPropertyName);
 					if (typeof value === "function") {
-						return value.call(scope);
+						return value;
 					}
 				}
 				
@@ -1485,6 +1741,16 @@
 			},
 			options: function(dom) {
 				return this._manager().getOptions(dom);
+			},
+
+			evaluate: function(expression) {
+				var func = Consistent.expressionToFunction(expression);
+				var snapshot = this.snapshot();
+				return evaluateExpression(func, snapshot);
+			},
+			exec: function(statements) {
+				var func = Consistent.statementToFunction(statements);
+				return evaluateStatement(func, this._scope());
 			}
 		}
 	};
@@ -1558,21 +1824,32 @@
 		seen.push(aObject);
 		seen.push(bObject);
 
+		if (aObject === bObject) {
+			return result;
+		}
+
 		var key;
-		for (key in aObject) {
-			if (aObject[key] !== bObject[key]) {
-				if (typeof aObject[key] === "object" && typeof bObject[key] === "object") {
-					/* Nested objects */
-					differentKeys(aObject[key], bObject[key], prefix + key + ".", depth + 1, result, seen);
-				} else {
-					result.push(prefix + key);
+		if (bObject !== null) {
+			for (key in aObject) {
+				if (aObject[key] !== bObject[key]) {
+					if (typeof aObject[key] === "object" && typeof bObject[key] === "object" &&
+						aObject[key] && bObject[key]) {
+						/* Nested objects */
+						differentKeys(aObject[key], bObject[key], prefix + key + ".", depth + 1, result, seen);
+					} else {
+						result.push(prefix + key);
+					}
 				}
+			}
+		} else {
+			for (key in aObject) {
+				result.push(prefix + key);
 			}
 		}
 
 		/* Collect anything that exists in bObject but isn't in aObject */
 		for (key in bObject) {
-			if (aObject[key] === undefined) {
+			if (aObject === null || aObject[key] === undefined) {
 				result.push(prefix + key);
 			}
 		}
@@ -1612,6 +1889,10 @@
 	function ConsistentScopeManager(parentScope, options) {
 		this._id = "ConsistentScope" + scopeId;
 		scopeId++;
+
+		if (options.name) {
+			this._name = options.name;
+		}
 
 		if (parentScope) {
 			this._parentScopeManager = parentScope.$._manager();
@@ -2010,6 +2291,10 @@
 			nodeOptions = mergeOptions({}, this._options, options);
 			nodeOptions = nodeOptions.$.getNodeOptions(dom, nodeOptions);
 
+			if (nodeOptions.bindings.noBind) {
+				return;
+			}
+
 			/* Mark the node as being part of this scope, although we do nothing with it.
 			 * That way you can still ask which scope it's a part of and find out.
 			 */	
@@ -2084,13 +2369,31 @@
 
 								for (i = 0; i < keys.length; i++) {
 									var key = keys[i];
-									var func = self._scope.$.getEventHandler(key);
+
+									var func;
+									var result;
+									if (typeof key === "function") {
+										/* Statements */
+										result = evaluateStatement(key, self._scope);
+										if (typeof result !== "function") {
+											ev.preventDefault();
+											self._scope.$.apply();
+											continue;
+										} else {
+											func = result;
+										}
+									}
+
+									if (func === undefined) {
+										/* Lookup event handler in the scope */
+										func = self._scope.$.getEventHandler(key);
+									}
 									if (func !== undefined) {
 										/* If the func is defined but "falsey" then we simply don't invoke the function,
 										 * but this is not an error.
 										 */
 										if (func) {
-											var result = func.call(self._scope, ev, dom);
+											result = func.call(self._scope, ev, dom);
 											if (result === false)
 												break;
 										}
@@ -2115,9 +2418,10 @@
 
 					/* Handle specific nodes differently */
 					var nodeName = dom.nodeName;
+					var listener;
 					if (nodeOptions.autoListenToChange && (nodeName === "INPUT" || nodeName === "TEXTAREA" || nodeName === "SELECT")) {
-						/* For input and textarea nodes we bind to their change event by default. */
-						var listener = function(ev) {
+						/* For input, textarea and select nodes we bind to their change event */
+						listener = function(ev) {
 							enhanceEvent(ev);
 							nodeOptions.$.update(dom, self._scope, nodeOptions);
 							self._scope.$.apply();
@@ -2128,6 +2432,16 @@
 						}
 
 						nodeOptions.$._changeListener = listener;
+					}
+					if (nodeOptions.autoListenToKeyEvents && (nodeName === "INPUT" || nodeName === "TEXTAREA")) {
+						/* For input and textarea nodes we bind to their key events */
+						listener = function(ev) {
+							enhanceEvent(ev);
+							nodeOptions.$.update(dom, self._scope, nodeOptions);
+							self._scope.$.apply();
+						};
+						addEventListener(dom, "keyup", listener, false);
+						nodeOptions.$._keyListener = listener;
 					}
 				}
 			}
@@ -2168,6 +2482,10 @@
 			/* Unbind changes */
 			if (options.$._changeListener !== undefined) {
 				dom.removeEventListener("change", options.$._changeListener, false);
+			}
+			/* Unbind keys */
+			if (options.$._keyListener !== undefined) {
+				dom.removeEventListener("keyup", options.$._keyListener, false);
 			}
 
 			this._domNodes.splice(i, 1);
@@ -2230,6 +2548,10 @@
 		newScope.$ = this._scope.$;
 		this._scope = newScope;
 		return newScope;
+	};
+
+	ConsistentScopeManager.prototype.destroy = function() {
+		this.unbind(this._rootDomNodes);
 	};
 
 
