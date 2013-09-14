@@ -120,7 +120,7 @@
 	
 	scope.$removeItem = function() {
 		console.log("$removeItem");
-		this.todos.splice(this.$.index,1);
+		scope.todos.splice(this.$.index,1);
 		this.$.apply();
 	};
 
