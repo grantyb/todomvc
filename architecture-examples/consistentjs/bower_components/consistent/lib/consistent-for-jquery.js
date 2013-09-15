@@ -275,10 +275,13 @@
 		return true;
 	}
 
-	function arrayIndexOf(array, searchElement, fromIndex) {
-		if (typeof array.indexOf === "function") {
+	var arrayIndexOf;
+	if (typeof [].indexOf === "function") {
+		arrayIndexOf = function(array, searchElement, fromIndex) {
 			return array.indexOf(searchElement, fromIndex);
-		} else {
+		};
+	} else {
+		arrayIndexOf = function(array, searchElement, fromIndex) {
 			if (fromIndex === undefined) {
 				fromIndex = 0;
 			}
@@ -294,7 +297,7 @@
 				}
 			}
 			return -1;
-		}
+		};
 	}
 
 	/**
@@ -696,6 +699,11 @@
 			/** Set the given value in the given dom object.
 			  */
 			setValue: function(dom, value) {
+				var currentValue = this.getValue(dom);
+				if (currentValue === value) {
+					return;
+				}
+
 				var nodeName = dom.nodeName;
 				if (nodeName === "INPUT" || nodeName === "TEXTAREA") {
 					if (dom.type === "checkbox") {
@@ -1738,6 +1746,15 @@
 				setNestedProperty(scope, key, value);
 				return scope;
 			},
+			fire: function(name, ev, dom) {
+				var func = this.getEventHandler(name);
+				var scope = this._scope();
+				if (func !== undefined) {
+					func.call(scope, ev, dom);
+				}
+				return scope;
+			},
+
 			getValueFunction: function(key, includeParents) {
 				if (includeParents !== undefined && typeof includeParents !== "boolean") {
 					throw exception("Invalid type for includeParents: " + typeof includeParents);
@@ -2020,7 +2037,7 @@
 		 *         domNodes: an array of top-level DOM nodes created,
 		 *         scope: the child scope created,
 		 *         version: version counter to track deletions,
-		 *		   after: dom node this appears after (or null if it's first)
+		 *		   before: dom node this appears before (or null if it's last)
 		 *     ]
 		 * }
 		 */
@@ -2046,10 +2063,13 @@
 
 		var version = repeatData.version;
 		var insertBefore = repeatData.insertBefore;
+		var insertInside = insertBefore.parentNode;
 		var previousNode = null;
 		var item;
+		var currentActiveElement = document.activeElement;
+		var needToRestoreFocus = false;
 
-		for (i = 0; i < repeatContext.length; i++) {
+		for (i = repeatContext.length - 1; i >= 0; i--) {
 			var object = repeatContext[i];
 			item = findRepeatItemForObject(object);
 
@@ -2074,15 +2094,19 @@
 				item.version = version;
 			}
 
-			insertDomNodesBefore(item.domNodes, insertBefore, insertBefore.parentNode);
+			var lastNode = item.domNodes[item.domNodes.length - 1];
+			if (wasNew || lastNode.nextSibling !== insertBefore) {
+				insertDomNodesBefore(item.domNodes, insertBefore, insertInside);
+			}
+		
 			if (wasNew) {
 				for (var j = 0; j < item.domNodes.length; j++) {
 					options.$.added(item.domNodes[j]);
 				}
 			}
 
-			item.after = previousNode;
-			previousNode = item.domNodes[item.domNodes.length - 1];
+			item.before = previousNode;
+			previousNode = insertBefore = item.domNodes[0];
 
 			item.scope.$.index = i;
 			item.scope.$.apply();
@@ -2092,11 +2116,11 @@
 		for (i = 0; i < repeatData.items.length; i++) {
 			item = repeatData.items[i];
 			if (item.version !== version) {
-				if (item.after) {
+				if (item.before) {
 					/* Maintain the position of this node in the DOM in case we animated
 					 * the removal.
 					 */
-					insertDomNodesBefore(item.domNodes, item.after.nextSibling, insertBefore.parentNode);
+					insertDomNodesBefore(item.domNodes, item.before, insertBefore.parentNode);
 				}
 				removeDomNodes(item.domNodes, item.scope);
 				repeatData.items.splice(i, 1);
@@ -2106,10 +2130,16 @@
 			}
 		}
 
+		if (needToRestoreFocus && currentActiveElement) {
+			currentActiveElement.focus();
+		}
+
 		function findRepeatItemForObject(object) {
-			for (var i = 0; i < repeatData.items.length; i++) {
-				if (repeatData.items[i].object === object) {
-					return repeatData.items[i];
+			var n = repeatData.items.length;
+			for (var i = 0; i < n; i++) {
+				var item = repeatData.items[i];
+				if (item.object === object) {
+					return item;
 				}
 			}
 			return undefined;
@@ -2117,22 +2147,29 @@
 
 		function newDomNodes() {
 			var result = [];
-			for (var i = 0; i < repeatData.domNodes.length; i++) {
+			var n = repeatData.domNodes.length;
+			for (var i = 0; i < n; i++) {
 				result.push(repeatData.domNodes[i].cloneNode(true));
 			}
 			return result;
 		}
 
 		function removeDomNodes(domNodes, scope) {
-			for (var i = 0; i < domNodes.length; i++) {
+			var n = domNodes.length;
+			for (var i = 0; i < n; i++) {
 				scope.$.unbind(domNodes[i]);
 				options.$.remove(domNodes[i]);
 			}
 		}
 
 		function insertDomNodesBefore(domNodes, insertBefore, parentNode) {
-			for (var i = 0; i < domNodes.length; i++) {
-				parentNode.insertBefore(domNodes[i], insertBefore);
+			var n = domNodes.length;
+			for (var i = 0; i < n; i++) {
+				var node = domNodes[i];
+				parentNode.insertBefore(node, insertBefore);
+				if (node === currentActiveElement) {
+					needToRestoreFocus = true;
+				}
 			}
 		}
 	};
@@ -2424,6 +2461,36 @@
 
 					var self = this;
 
+					/* Bind special Consistent events before declared events */
+					var nodeName = dom.nodeName;
+					var listener;
+					if (nodeOptions.autoListenToChange && (nodeName === "INPUT" || nodeName === "TEXTAREA" || nodeName === "SELECT")) {
+						/* For input, textarea and select nodes we bind to their change event */
+						listener = function(ev) {
+							enhanceEvent(ev);
+							nodeOptions.$.update(dom, self._scope, nodeOptions);
+							self._nodesDirty = true; // TODO this is brute force, could be more narrow
+							self._scope.$.apply();
+						};
+						addEventListener(dom, "change", listener, false);
+						if (support.needAggressiveChangeHandlingOnInputElements && (nodeName === "INPUT" && (dom.type === "checkbox" || dom.type === "radio"))) {
+							addEventListener(dom, "click", listener, false);
+						}
+
+						nodeOptions.$._changeListener = listener;
+					}
+					if (nodeOptions.autoListenToKeyEvents && (nodeName === "INPUT" || nodeName === "TEXTAREA")) {
+						/* For input and textarea nodes we bind to their key events */
+						listener = function(ev) {
+							enhanceEvent(ev);
+							nodeOptions.$.update(dom, self._scope, nodeOptions);
+							self._nodesDirty = true; // TODO this is brute force, could be more narrow
+							self._scope.$.apply();
+						};
+						addEventListener(dom, "keyup", listener, false);
+						nodeOptions.$._keyListener = listener;
+					}
+
 					/* Bind events */
 					for (var eventName in nodeOptions.bindings.events) {
 						(function(eventName, keys) {
@@ -2491,36 +2558,6 @@
 							nodeOptions.bindings.events[eventName].listener = listener;
 							addEventListener(dom, eventName, listener);
 						})(eventName, nodeOptions.bindings.events[eventName].keys);
-					}
-
-					/* Handle specific nodes differently */
-					var nodeName = dom.nodeName;
-					var listener;
-					if (nodeOptions.autoListenToChange && (nodeName === "INPUT" || nodeName === "TEXTAREA" || nodeName === "SELECT")) {
-						/* For input, textarea and select nodes we bind to their change event */
-						listener = function(ev) {
-							enhanceEvent(ev);
-							nodeOptions.$.update(dom, self._scope, nodeOptions);
-							self._nodesDirty = true; // TODO this is brute force, could be more narrow
-							self._scope.$.apply();
-						};
-						addEventListener(dom, "change", listener, false);
-						if (support.needAggressiveChangeHandlingOnInputElements && (nodeName === "INPUT" && (dom.type === "checkbox" || dom.type === "radio"))) {
-							addEventListener(dom, "click", listener, false);
-						}
-
-						nodeOptions.$._changeListener = listener;
-					}
-					if (nodeOptions.autoListenToKeyEvents && (nodeName === "INPUT" || nodeName === "TEXTAREA")) {
-						/* For input and textarea nodes we bind to their key events */
-						listener = function(ev) {
-							enhanceEvent(ev);
-							nodeOptions.$.update(dom, self._scope, nodeOptions);
-							self._nodesDirty = true; // TODO this is brute force, could be more narrow
-							self._scope.$.apply();
-						};
-						addEventListener(dom, "keyup", listener, false);
-						nodeOptions.$._keyListener = listener;
 					}
 				}
 			}

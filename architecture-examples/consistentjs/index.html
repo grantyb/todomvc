@@ -10,7 +10,7 @@
 		<section id="todoapp">
 			<header id="header">
 				<h1>todos</h1>
-				<input id="new-todo" name="newTodo" ct-on-blur="addItem" ct-on-keypress="newTodoKeyPress" placeholder="What needs to be done?" autofocus>
+				<input id="new-todo" name="newTodo" ct-on-blur="addItem" ct-on-keyup="newTodoKeyPress" placeholder="What needs to be done?" autofocus>
 			</header>
 			<section id="main" ct-show="todos.length > 0">
 				<input id="toggle-all" ct="allTodosAreComplete" type="checkbox">
@@ -22,7 +22,7 @@
 							<label ct="title" ct-on-dblclick="editItem"></label>
 							<button class="destroy" ct-on="removeItem"></button>
 						</div>
-						<input class="edit" name="editedTitle" ct-on-blur="updateItem" ct-on-keypress="editTodoKeyPress">
+						<input class="edit" name="editedTitle" ct-on-blur="updateItem" ct-on-keyup="editTodoKeyPress">
 					</li>
 				</ul>
 			</section>

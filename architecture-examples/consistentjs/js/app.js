@@ -16,16 +16,12 @@
 		var result = []
 		if ( this.completed ) result.push("completed");
 		if ( this.editing ) result.push("editing");
-		console.log("Modes called for " + this.title,result);
+		// console.log("Modes called for " + this.title,result);
 		return result;
-	};
-	
-	var scopeOptions = {
-		"autoListenToKeyEvents": false
 	};
 
 	// Initialise Consistent.js on the main DOM element
-	var scope = $("#todoapp").consistent(scopeOptions);
+	var scope = $("#todoapp").consistent();
 	
 	// Set the default state
 	scope.todos = [];
@@ -37,7 +33,7 @@
 	}
 	
 	scope.filteredTodos = function() {
-		console.log("filteredTodos");
+		// console.log("filteredTodos");
 		if ( scope.filter === "completed" ) {
 			return scope.completedItems();
 		} else if ( scope.filter === "active" ) {
@@ -48,7 +44,7 @@
 	};
 	
 	scope.allTodosAreComplete = function(checked) {
-		console.log("allTodosAreComplete");
+		// console.log("allTodosAreComplete");
 		var result = scope.completedItems().length === scope.todos.length;
 		if ( typeof checked === "undefined" ) {
 			return result;
@@ -56,26 +52,25 @@
 			var newState = !result;
 			for ( var i = 0; i < scope.todos.length; i++ ) {
 				scope.todos[i].completed = newState;
-				scope.todos[i].$.apply();
 			}
 			scope.$.apply();
 		}
 	};
 	
 	scope.completedItems = function() {
-		console.log("completedItems");
+		// console.log("completedItems");
 		return $.grep(scope.todos, function(todo, i) {
 			return todo.completed;
 		});
 	};
 	
 	scope.activeItems = function() {
-		console.log("activeItems");
+		// console.log("activeItems");
 		return $.grep(scope.todos, function(todo, i) {
 			return !todo.completed;
 		});
 	};
-	
+
 	scope.$addItem = function() {
 		console.log("$addItem");
 		var title = scope.newTodo.trim();
@@ -87,37 +82,35 @@
 	};
 	
 	scope.$editItem = function(e) {
-		console.log("$editItem");
+		// console.log("$editItem");
 		this.editing = true;
 		scope.$.apply();
 		$(e.target).closest("li").find(".edit").focus();
 	};
 	
-	scope.$updateItem = function() {
+	scope.$updateItem = function(e, dom) {
 		console.log("$updateItem");
 		var title = this.editedTitle.trim();
 		if ( title.length ) {
-			this.title = this.editedTitle;
+			this.title = title;
 			this.editing = false;
 		} else {
-			this.$removeItem();
+			this.$.fire("removeItem", e, dom);
 		}
 		scope.$.apply();
 	};
-	
+
 	scope.$newTodoKeyPress = function(e, dom) {
 		console.log("$newTodoKeyPress");
 		if (e.which === ENTER_KEY) {
-			this.$.update(dom);
-			scope.$addItem();
+			this.$.fire("addItem", e, dom);
 		}
 	};
 	
 	scope.$editTodoKeyPress = function(e, dom) {
 		console.log("$editTodoKeyPress", e.which);
 		if (e.which === ENTER_KEY) {
-			this.$.update(dom);
-			scope.$updateItem.call(this);
+			this.$.fire("updateItem", e, dom);
 		} else if (e.which === ESCAPE_KEY) {
 			this.editing = false;
 			scope.$.apply();
