@@ -1,6 +1,6 @@
 {
   "name": "consistent.js",
-  "version": "0.9.5",
+  "version": "0.9.7",
   "main": "src/consistent.js",
   "ignore": [
     "**/.*",
@@ -12,13 +12,13 @@
     "Makefile"
   ],
   "homepage": "https://github.com/karlvr/consistent.js",
-  "_release": "0.9.5",
+  "_release": "0.9.7",
   "_resolution": {
     "type": "version",
-    "tag": "v0.9.5",
-    "commit": "993725571df974c1cd566c6e4e4a4630bedb97fe"
+    "tag": "v0.9.7",
+    "commit": "98d42275ecc846d2a1e1f2905fd1fbcd52e0e178"
   },
   "_source": "git://github.com/karlvr/consistent.js.git",
-  "_target": "~0.9.3",
+  "_target": "~0.9.5",
   "_originalSource": "consistent"
 }

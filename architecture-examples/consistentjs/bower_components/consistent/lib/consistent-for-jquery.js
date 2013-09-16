@@ -1,5 +1,5 @@
 /*!
- * Consistent.js 0.9.5
+ * Consistent.js 0.9.7
  * @author Karl von Randow
  * @license Apache License, Version 2.0
  */
@@ -1958,6 +1958,7 @@
 		this._watchers = {};
 		this._nodesDirty = false;
 		this._applying = false;
+		this._repeatNodeScope = false;
 
 		var self = this;
 		this._scope = mergeOptions({}, Consistent.defaultEmptyScope);
@@ -1982,17 +1983,6 @@
 		this._applying = true;
 
 		var i, n;
-		if (includeChildren) {
-			/* As we've already set _applying in this scope, each child scope will
-			 * attempt to call apply on its parent and we'll return immediately.
-			 * So we then come back and apply this scope after all the children are
-			 * done.
-			 */
-			var childScopes = this._scope.$.children();
-			for (i = 0, n = childScopes.length; i < n; i++) {
-				childScopes[i].$.apply(true);
-			}
-		}
 
 		if (this._updateCleanScopeAndFireWatchers() || this._nodesDirty) {
 			/* Apply to the DOM */
@@ -2005,11 +1995,34 @@
 				nodeOptions.$.apply(node.dom, this._cleanScopeSnapshot, nodeOptions);
 			}
 
+			/* Handle repeated nodes */
 			n = this._repeatNodes.length;
 			for (i = 0; i < n; i++) {
 				var repeatData = this._repeatNodes[i];
 				nodeOptions = options !== undefined ? mergeOptions({}, repeatData.options, options) : repeatData.options;
 				this._handleRepeat(repeatData, nodeOptions, this._cleanScopeSnapshot);
+			}
+
+			/* Cascade to children */
+			if (includeChildren !== false) {
+				/* As we've already set _applying in this scope, each child scope will
+				 * attempt to call apply on its parent and we'll return immediately.
+				 * So we then come back and apply this scope after all the children are
+				 * done.
+				 */
+				var childScopes = this._scope.$.children();
+				for (i = 0, n = childScopes.length; i < n; i++) {
+					var childScope = childScopes[i];
+
+					/* Check that the child isn't a repeat node, which is applied
+					 * below as part of the normal behaviour.
+					 */
+					if (childScope.$._manager()._repeatNodeScope) {
+						continue;
+					}
+
+					childScope.$.apply(true);
+				}
 			}
 
 			this._nodesDirty = false;
@@ -2079,6 +2092,7 @@
 				var domNodes = newDomNodes();
 
 				var childScope = Consistent(this._scope, this._options);
+				childScope.$._manager()._repeatNodeScope = true;
 				childScope.$.bind(domNodes);
 				childScope = childScope.$.replace(object);
 
@@ -2105,7 +2119,7 @@
 				}
 			}
 
-			item.before = previousNode;
+			item.before = insertBefore;
 			previousNode = insertBefore = item.domNodes[0];
 
 			item.scope.$.index = i;
@@ -2113,20 +2127,28 @@
 		}
 
 		/* Find deleted objects */
-		for (i = 0; i < repeatData.items.length; i++) {
+		var nodesToRemove = [];
+		for (i = repeatData.items.length - 1; i >= 0; i--) {
 			item = repeatData.items[i];
 			if (item.version !== version) {
-				if (item.before) {
-					/* Maintain the position of this node in the DOM in case we animated
-					 * the removal.
-					 */
-					insertDomNodesBefore(item.domNodes, item.before, insertBefore.parentNode);
-				}
-				removeDomNodes(item.domNodes, item.scope);
+				/* Maintain the position of this node in the DOM in case we animated
+				 * the removal.
+				 */
+				insertDomNodesBefore(item.domNodes, item.before, insertInside);
+				
+				item.scope.$.unbind(item.domNodes);
+				/* We queue the objects to remove them from the DOM after this loop
+				 * as we reposition the nodes relative to each other in this loop.
+				 */
+				nodesToRemove = nodesToRemove.concat(item.domNodes);
 				repeatData.items.splice(i, 1);
 
 				item.scope.$.index = undefined;
-				i--;
+			}
+		}
+		if (nodesToRemove.length) {
+			for (i = nodesToRemove.length - 1; i >= 0; i--) {
+				options.$.remove(nodesToRemove[i]);
 			}
 		}
 
@@ -2152,14 +2174,6 @@
 				result.push(repeatData.domNodes[i].cloneNode(true));
 			}
 			return result;
-		}
-
-		function removeDomNodes(domNodes, scope) {
-			var n = domNodes.length;
-			for (var i = 0; i < n; i++) {
-				scope.$.unbind(domNodes[i]);
-				options.$.remove(domNodes[i]);
-			}
 		}
 
 		function insertDomNodesBefore(domNodes, insertBefore, parentNode) {
@@ -2690,7 +2704,7 @@
 
 })(window);
 /*!
- * Consistent.js Expressions 0.9.5
+ * Consistent.js Expressions 0.9.7
  * @author Karl von Randow
  * @license Apache License, Version 2.0
  */
@@ -3023,7 +3037,7 @@
 	}
 })(window);
 /*! 
- * Consistent.js jQuery plugin 0.9.5
+ * Consistent.js jQuery plugin 0.9.7
  * @author Karl von Randow
  * @license Apache License, Version 2.0
  */

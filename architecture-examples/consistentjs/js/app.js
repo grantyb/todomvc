@@ -9,7 +9,7 @@
 	var Todo = function(opts) {
 		var todo = this;
 		todo.title = opts.title;
-		todo.editedTitle = opts.title;
+		todo.savedTitle = opts.title;
 		todo.completed = opts.completed || false;
 		todo.editing = false;
 	};
@@ -19,6 +19,40 @@
 		if ( this.completed ) result.push("completed");
 		if ( this.editing ) result.push("editing");
 		return result;
+	};
+	
+	Todo.prototype.$editTodoKeyPress = function(e) {
+		if (e.which === ENTER_KEY) {
+			this.$updateItem();
+		} else if (e.which === ESCAPE_KEY) {
+			this.editing = false;
+			this.title = this.savedTitle;
+			this.$.apply();
+		}
+	};
+	
+	Todo.prototype.$editItem = function() {
+		this.editing = true;
+		this.savedTitle = this.title;
+		this.$.apply();
+		$(this.$.nodes()).find(".edit").focus();
+	};
+	
+	Todo.prototype.$updateItem = function() {
+		var title = this.title.trim();
+		if ( title.length ) {
+			this.title = title;
+			this.savedTitle = title;
+			this.editing = false;
+		} else {
+			this.$removeItem();
+		}
+		this.$.apply();
+	};
+
+	Todo.prototype.$removeItem = function() {
+		this.$.get("todos").splice(this.$.index,1);
+		this.$.apply();
 	};
 
 	// Initialise Consistent.js on the main DOM element
@@ -77,43 +111,12 @@
 		}
 	};
 	
-	scope.$editItem = function(e) {
-		this.editing = true;
-		scope.$.apply();
-		$(e.target).closest("li").find(".edit").focus();
-	};
-	
-	scope.$updateItem = function(e, dom) {
-		var title = this.editedTitle.trim();
-		if ( title.length ) {
-			this.title = title;
-			this.editing = false;
-		} else {
-			this.$.fire("removeItem", e, dom);
-		}
-		scope.$.apply();
-	};
-
 	scope.$newTodoKeyPress = function(e, dom) {
 		if (e.which === ENTER_KEY) {
-			this.$.fire("addItem", e, dom);
+			scope.$addItem();
 		}
 	};
 	
-	scope.$editTodoKeyPress = function(e, dom) {
-		if (e.which === ENTER_KEY) {
-			this.$.fire("updateItem", e, dom);
-		} else if (e.which === ESCAPE_KEY) {
-			this.editing = false;
-			scope.$.apply();
-		}
-	};
-	
-	scope.$removeItem = function() {
-		scope.todos.splice(this.$.index,1);
-		this.$.apply();
-	};
-
 	scope.$removeCompleted = function() {
 		scope.todos = scope.activeItems();
 		scope.$.apply();
@@ -128,10 +131,14 @@
 	}).init();	
 
 	// Store the state on unload
-	$(window).bind("beforeunload", function() {
-		localStorage.setItem('todos-consistent.js', JSON.stringify({
-			todos : scope.todos
-		}));
+	var debounceTimer;
+	scope.$.watch(function() {
+		if ( debounceTimer ) clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(function(){
+			localStorage.setItem('todos-consistent.js', JSON.stringify({
+				todos : scope.todos
+			}))
+		}, 0);
 	});
 
 	// Apply the initial scope
