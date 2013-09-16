@@ -27,16 +27,19 @@
 				</ul>
 			</section>
 			<footer id="footer" ct-show="todos.length > 0">
-				<span id="todo-count"><strong ct="activeItems.length"></strong> item<span ct-show="activeItems.length ne 1">s</span></span>
+				<span id="todo-count">
+					<strong ct="activeItems.length"></strong>
+					item<span ct-show="activeItems.length ne 1">s</span>
+				</span>
 				<ul id="filters">
 					<li>
-						<a ct-class="filter == 'all' ? 'selected' : ''" href="#/all">All</a>
+						<a ct-class="filter === 'all' ? 'selected' : ''" href="#/all">All</a>
 					</li>
 					<li>
-						<a ct-class="filter == 'active' ? 'selected' : ''" href="#/active">Active</a>
+						<a ct-class="filter === 'active' ? 'selected' : ''" href="#/active">Active</a>
 					</li>
 					<li>
-						<a ct-class="filter == 'completed' ? 'selected' : ''" href="#/completed">Completed</a>
+						<a ct-class="filter === 'completed' ? 'selected' : ''" href="#/completed">Completed</a>
 					</li>
 				</ul>
 				<button id="clear-completed" ct-hide="completedItems.length === 0" ct-on="removeCompleted">
