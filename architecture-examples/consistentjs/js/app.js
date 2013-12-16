@@ -21,6 +21,13 @@
 		return result;
 	};
 
+	Todo.prototype.serialize = function() {
+		return {
+			title: this.title,
+			completed: this.completed
+		};
+	};
+
 	// The TodoController is the controller for the main scope
 	var TodoController = function(scope) {
 		// Initialise the default state of the scope
@@ -135,9 +142,14 @@
 
 	TodoController.prototype.save = function() {
 		var scope = this.$.scope();
-		localStorage.setItem('todos-consistent.js', JSON.stringify({
-			todos : scope.todos
-		}));
+		var serializedTodos = [];
+		for (var i = 0; i < scope.todos.length; i++) {
+			serializedTodos.push(scope.todos[i].serialize());
+		}
+		var save = JSON.stringify({
+			todos : serializedTodos
+		});
+		localStorage.setItem('todos-consistent.js', save);
 	};
 
 	// Initialise Consistent.js on the main DOM element
@@ -153,7 +165,7 @@
 
 	// Store the state each time the scope changes
 	var debounceTimer;
-	scope.$.watch(function(whichScope) {
+	scope.$.watch("todos", function(whichScope) {
 		// Only listen to the main scope
 		if (whichScope === scope) {
 			if ( debounceTimer ) clearTimeout(debounceTimer);
