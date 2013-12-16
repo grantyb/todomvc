@@ -1,5 +1,5 @@
 /*!
- * Consistent.js 0.11.0
+ * Consistent.js 0.12.0
  * @author Karl von Randow
  * @license Apache License, Version 2.0
  */
@@ -1751,6 +1751,9 @@
 					 */
 					var valueFunction = this.getValueFunction(key);
 					if (valueFunction !== undefined) {
+						/* Note that we do not need to set this, as getValueFunction forces this to be bound
+						 * to the declaring scope.
+						 */
 						valueFunction.call(null, scope, value);
 						return scope;
 					}
@@ -1760,8 +1763,8 @@
 				if (typeof current !== "function") {
 					setNestedProperty(scope, key, value);
 				} else if (!this.options().valueFunctionPrefix) {
-					/* Value function */
-					current.call(null, scope, value);
+					/* Value function - note we must set this as we are calling it directly */
+					current.call(scope, scope, value);
 				} else {
 					/* Overwrite the function with a scalar value. It is not valid to reference value functions
 					 * by their name including prefix, as the snapshot does not contain values like that
@@ -2347,7 +2350,7 @@
 				 * called this watcher. So it won't be notified of its own changes.
 				 */
 				if (notifying[watcherId] === undefined || !isEqual(notifying[watcherId].cleanValue, newValue)) {
-					watcher.call(scope, key, newValue, oldValue);
+					watcher.call(this._scope, scope, key, newValue, oldValue);
 
 					/* Record clean value from the actual scope, as that will contain any changes this function made */
 					notifying[watcherId] = { cleanValue: scope.$.get(key) };
@@ -2384,7 +2387,7 @@
 				 * called this watcher. So it won't be notified of its own changes.
 				 */
 				if (notifying[watcherId] === undefined || !isEqual(scopeSnapshot, notifying[watcherId].cleanScopeSnapshot)) {
-					watchers[i].call(scope, keys, scopeSnapshot, oldScopeSnapshot);
+					watchers[i].call(this._scope, scope, keys, scopeSnapshot, oldScopeSnapshot);
 
 					/* Record clean snapshot from the actual scope, as that will contain any changes this function made */
 					notifying[watcherId] = { cleanScopeSnapshot: scope.$.snapshot() };

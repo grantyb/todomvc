@@ -157,13 +157,13 @@ scope.numberOfPeople = function() {
 scope.$.apply();
 ```
 
-The value function gets called with `this` set to the scope, and no arguments. As for other scope properties, if the value function returns `undefined` then no changes will be made to the DOM.
+The value function gets called with `this` set to the scope it is declared in, and one argument; the scope where the request for the value originates, which is important when using parent and child scopes. As for other scope properties, if the value function returns `undefined` then no changes will be made to the DOM.
 
-When the scope is populated from the DOM using the `scope.$.update` function, or when a scope property is set manually using the `scope.$.set` function, and the scope contains a value function for the affected property; the value function is called with one argument - the incoming value. Your value function can ignore this if it doesn’t support updates.
+When the scope is populated from the DOM using the `scope.$.update` function, or when a scope property is set manually using the `scope.$.set` function, and the scope contains a value function for the affected property; the value function is called with two arguments, the scope where the “set” originates, and the new value. Your value function can simply ignore this form if it doesn’t support updates.
 
 ```javascript
 var numberOfPeople = 5;
-scope.numberOfPeople = function(newValue) {
+scope.numberOfPeople = function(localScope, newValue) {
 	if (typeof newValue !== "undefined") {
 		numberOfPeople = parseInt(newValue);
 	} else {
@@ -401,14 +401,14 @@ Repeating clones the repeated element, including all of its children:
 ```
 
 ```javascript
-scope.index = function() {
-	return this.$.index;
+scope.index = function(childScope) {
+	return childScope.$.index;
 };
 ```
 
 Note above that the scope contains a property `scope.$.index` that contains the 0-based index of the current repeated block. You can’t access this property directly from the DOM as it is inside the `$` object, but you can use a value function to access it (and to add 1 to it if you want the index to be 1-based!).
 
-Another interesting thing is happening in this example, which will be clearer after reading the Parent scopes section. An `index` value function is added to the parent scope. Each repeating block gets a child scope, which when it looks for the `index` property will fall back to the parent scope. When a value function is called in a parent scope, `this` is set to the child scope. So `return this.$.index` above returns the index from the child scope!
+Another interesting thing is happening in this example, which will be clearer after reading the Parent scopes section. The `index` value function is added to the parent scope. Each repeating block gets a child scope, which when it looks for the `index` property will fall back to the parent scope. When a value function is called the first argument is the scope asking for the value, which in this case is the child scope. So `return childScope.$.index` above returns the index from the child scope! If we’d written `this.$.index` it would have tried to find the index of the parent scope, which would not exist in this case.
 
 It is also possible to repeat a collection of elements. See Repeating multiple elements in the Advanced section.
 
@@ -683,11 +683,11 @@ Note this doesn’t work for any properties that are using templates.
 Register a handler function to watch for changes to a particular property, or to the scope as a whole. Watch handler functions are called when `apply` is called on the scope, **before** the DOM has been updated.
 
 ```javascript
-scope.$.watch("title", function(key, newValue, oldValue) {
+scope.$.watch("title", function(scope, key, newValue, oldValue) {
 	this.shortTitle = this.title.substring(0, 10);
 });
 
-scope.$.watch(function(changedKeys, snapshot, oldSnapshot) {
+scope.$.watch(function(scope, changedKeys, snapshot, oldSnapshot) {
 	this.changeSummary = "The following keys were changed: " + changedKeys;
 });
 ```
@@ -699,6 +699,8 @@ Notice that you do not need to call `apply` if you change the scope inside a wat
 Value functions are watched based on their value. If the value returned by a value function changes between one apply and the next, the watch handler function will be called.
 
 It is possible for watch handlers to cause an infinite loop, if the scope does not reach a steady state. This is especially likely if you use value functions that return a new value each time they are evaluated. Consistent detects excessive looping through the watch handler list and throws an exception to break it. The number of loops is set in `Consistent.settings.maxWatcherLoops`; the default should be good enough.
+
+The `scope` parameter contains the scope in which the property changed. This is important when using parent and child scopes.
 
 ### Populating the scope from another object
 
@@ -789,13 +791,13 @@ scope.$.set(nestedPropertyName, value);
 
 If the appropriate intermediate objects don’t exist, when calling `set`, they are created and added to the scope for you.
 
-Note that `get` will fall back to a parent scope, if there is one. See below for Parent scopes. If you don’t want to fall back to a parent scope pass true for the optional `includeParents` parameter, e.g. `get(key, false)` instead.
+Note that `get` will fall back to a parent scope, if there is one. See below for Parent scopes. If you don’t want to fall back to a parent scope pass `false` for the optional `includeParents` parameter, e.g. `get(key, false)` instead.
 
 ### Parent scopes
 
 You can create parent and child scopes. Child scopes will look to their parent if they don’t contain a value for a given property, and so on up the parent chain. When a snapshot is created of a scope, it will include all of the properties in its parent, and its parent’s parent, and so on. As snapshots are used to apply the scope to the DOM, the combined properties of all of the scopes are available to be applied to the DOM.
 
-When `apply()` is called on a child scope, it automatically calls `apply()` on its parent scope.
+When `apply()` is called on a child scope, and the child scope needs to be applied, it automatically calls `apply()` on its parent scope after applying itself. Similarly, when `apply()` is called on a parent scope, and the parent scope needs to be applied, it automatically calls `apply()` on its child scopes after applying itself. Note that in both of these cases, if the scope doesn’t need to be applied, i.e. there are no changes, it does not cascade to parents or children. So always call `apply()` on the scope that you’ve changed.
 
 ```javascript
 var rootScope = Consistent(); /* Create the root scope */
@@ -822,18 +824,18 @@ Then if you add a title to the childScope and apply it again, it will override t
 
 #### Value functions
 
-When a snapshot is created, the value functions are executed and the snapshot contains their value rather. When a value function in a parent scope is executed for a child scope, `this` inside the value function will be the child scope, rather than the scope in which it is defined.
+When a snapshot is created, the value functions are executed and the snapshot will contain their value rather than the function. When a value function in a parent scope is executed for a child scope, the first argument to the value function will be the child scope. Value functions can therefore decide whether to access the scope in which they were declared (`this`), or the scope in which they are accessed (the first argument).
 
 ```javascript
-rootScope.title = function() {
-	return this.myTitle;
+rootScope.title = function(childScope) {
+	return childScope.myTitle;
 };
 childScope.myTitle = "Title from the child";
 ```
 
 #### Event handlers
 
-If a scope’s controller doesn’t contain the named event handler, the parent scope’s controller will be searched, and so on up the parent chain. Unlike value functions, event handlers are always invoked with `this` set to the controller in which they are declared. Event handlers receive a third argument, which is the scope in which the event occurred. The function can use that value, if necessary, to operate on the scope where the event occurred.
+If a scope’s controller doesn’t contain the named event handler, the parent scope’s controller will be searched, and so on up the parent chain. Unlike value functions, event handlers are always invoked with `this` set to the controller in which they are declared. Event handlers’ first argument is the scope in which the event occurred. The function can use that value, if necessary, to operate on the scope where the event occurred.
 
 ```html
 <div id="item">
@@ -849,7 +851,7 @@ rootScope.$.controller("handleClick", function(childScope, ev, dom) {
 
 #### Watch handler functions
 
-Watch handler functions added to parent scopes will be fired for changes in child scopes. Note that `this` inside the watch function will be the child scope, rather than the scope in which the watch function is defined.
+Watch handler functions added to parent scopes will be fired for changes in child scopes. Note that `this` inside the watch function will always be the scope where the watch function is declared, however the first argument will be the child scope. In this way the watch function can access both the scope where the change occurred and the scope where it was declared.
 
 
 ### Getting the nodes bound to a scope
@@ -1087,7 +1089,7 @@ The `NAME` segment in the following list represents the name of the attribute or
 
 #### Event handlers
 
-* `ct-on` binds the default event for this element to the named event handler function in the scope. Event handler functions are called with `this` set to the scope, the first argument is the event object and the second argument is the DOM node source of the event.
+* `ct-do` binds the default event for this element to the named event handler function in the scope. Event handler functions are called with the scope as the first argument, the second argument is the event object and the third argument is the DOM node source of the event.
 * `ct-on-EVENT` binds the event named EVENT for this element to the named event handler function in the scope.
 
 #### Repeating blocks
