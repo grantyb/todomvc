@@ -1,11 +1,11 @@
-(function (window) {
+(function () {
 	'use strict';
 
 	var ENTER_KEY = 13;
 	var ESCAPE_KEY = 27;
 	var LOCAL_STORAGE_KEY = 'todos-consistent.js';
 	
-	// Set up the Todo "class"
+	// Set up the Todo class, instances of this class will be the scope for each todo item
 	var Todo = function(opts) {
 		var todo = this;
 		todo.title = opts.title;
@@ -21,17 +21,20 @@
 		return result;
 	};
 
+	// The TodoController is the controller for the main scope
 	var TodoController = function(scope) {
-		// Set the default state
+		// Initialise the default state of the scope
 		scope.todos = [];
 		scope.newTodo = "";
 		scope.filter = "all";
+
+		// Restore the saved state
 		var savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{"todos":[]}');
 		for ( var i = 0; i < savedState.todos.length; i++ ) {
 			scope.todos.push(new Todo(savedState.todos[i]));
 		}
 
-		/* Value functions */
+		// Add value functions to the scope
 		scope.filteredTodos = function() {
 			if ( this.filter === "completed" ) {
 				return this.completedItems();
@@ -45,8 +48,10 @@
 		scope.allTodosAreComplete = function(localScope, checked) {
 			var result = this.completedItems().length === this.todos.length;
 			if ( typeof checked === "undefined" ) {
+				// Return true if all of the todos are complete
 				return result;
 			} else {
+				// Set todos to be completed or not completed by toggling current "all complete" value
 				var newState = !result;
 				for ( var i = 0; i < this.todos.length; i++ ) {
 					this.todos[i].completed = newState;
@@ -89,7 +94,6 @@
 	};
 	
 	TodoController.prototype.updateItem = function(todo) {
-		console.log("UPDATE ITEM " + todo);
 		var title = todo.title.trim();
 		if ( title.length ) {
 			todo.title = title;
@@ -147,16 +151,19 @@
 		}
 	}).init();	
 
-	// Store the state on unload
+	// Store the state each time the scope changes
 	var debounceTimer;
-	scope.$.watch(function() {
-		if ( debounceTimer ) clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(function(){
-			scope.$.fire("save");
-		}, 0);
+	scope.$.watch(function(whichScope) {
+		// Only listen to the main scope
+		if (whichScope === scope) {
+			if ( debounceTimer ) clearTimeout(debounceTimer);
+			debounceTimer = setTimeout(function(){
+				scope.$.fire("save");
+			}, 0);
+		}
 	});
 
 	// Apply the initial scope
 	scope.$.apply();
 
-})(window);
+})();
