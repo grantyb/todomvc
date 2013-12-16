@@ -20,7 +20,7 @@
 						<div class="view">
 							<input class="toggle" name="completed" type="checkbox">
 							<label ct="title" ct-on-dblclick="editItem"></label>
-							<button class="destroy" ct-on="removeItem"></button>
+							<button class="destroy" ct-do="removeItem"></button>
 						</div>
 						<input class="edit" name="title" ct-on-blur="updateItem" ct-on-keyup="editTodoKeyPress">
 					</li>
@@ -42,7 +42,7 @@
 						<a ct-class="filter === 'completed' ? 'selected' : ''" href="#/completed">Completed</a>
 					</li>
 				</ul>
-				<button id="clear-completed" ct-hide="completedItems.length === 0" ct-on="removeCompleted">
+				<button id="clear-completed" ct-hide="completedItems.length === 0" ct-do="removeCompleted">
 					Clear completed (<span ct="completedItems.length"></span>)
 				</button>
 			</footer>

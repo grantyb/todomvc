@@ -1,4 +1,4 @@
-(function () {
+(function (window) {
 	'use strict';
 
 	var ENTER_KEY = 13;
@@ -20,89 +20,95 @@
 		if ( this.editing ) result.push("editing");
 		return result;
 	};
-	
-	Todo.prototype.$editTodoKeyPress = function(e) {
-		if (e.which === ENTER_KEY) {
-			this.$updateItem();
-		} else if (e.which === ESCAPE_KEY) {
-			this.editing = false;
-			this.title = this.savedTitle;
-			this.$.apply();
-		}
-	};
-	
-	Todo.prototype.$editItem = function() {
-		this.editing = true;
-		this.savedTitle = this.title;
-		this.$.apply();
-		$(this.$.nodes()).find(".edit").focus();
-	};
-	
-	Todo.prototype.$updateItem = function() {
-		var title = this.title.trim();
-		if ( title.length ) {
-			this.title = title;
-			this.savedTitle = title;
-			this.editing = false;
-		} else {
-			this.$removeItem();
-		}
-		this.$.apply();
-	};
 
-	Todo.prototype.$removeItem = function() {
-		this.$.get("todos").splice(this.$.index,1);
-		this.$.apply();
-	};
-
-	// Initialise Consistent.js on the main DOM element
-	var scope = $("#todoapp").consistent();
-	
-	// Set the default state
-	scope.todos = [];
-	scope.newTodo = "";
-	scope.filter = "all";
-	var savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{"todos":[]}');
-	for ( var i = 0; i < savedState.todos.length; i++ ) {
-		scope.todos.push(new Todo(savedState.todos[i]));
-	}
-	
-	scope.filteredTodos = function() {
-		if ( scope.filter === "completed" ) {
-			return scope.completedItems();
-		} else if ( scope.filter === "active" ) {
-			return scope.activeItems();
-		} else {
-			return scope.todos;
+	var TodoController = function(scope) {
+		// Set the default state
+		scope.todos = [];
+		scope.newTodo = "";
+		scope.filter = "all";
+		var savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{"todos":[]}');
+		for ( var i = 0; i < savedState.todos.length; i++ ) {
+			scope.todos.push(new Todo(savedState.todos[i]));
 		}
-	};
-	
-	scope.allTodosAreComplete = function(checked) {
-		var result = scope.completedItems().length === scope.todos.length;
-		if ( typeof checked === "undefined" ) {
-			return result;
-		} else {
-			var newState = !result;
-			for ( var i = 0; i < scope.todos.length; i++ ) {
-				scope.todos[i].completed = newState;
+
+		/* Value functions */
+		scope.filteredTodos = function() {
+			if ( this.filter === "completed" ) {
+				return this.completedItems();
+			} else if ( this.filter === "active" ) {
+				return this.activeItems();
+			} else {
+				return this.todos;
 			}
-			scope.$.apply();
+		};
+		
+		scope.allTodosAreComplete = function(localScope, checked) {
+			var result = this.completedItems().length === this.todos.length;
+			if ( typeof checked === "undefined" ) {
+				return result;
+			} else {
+				var newState = !result;
+				for ( var i = 0; i < this.todos.length; i++ ) {
+					this.todos[i].completed = newState;
+				}
+				this.$.apply();
+			}
+		};
+		
+		scope.completedItems = function() {
+			return $.grep(this.todos, function(todo, i) {
+				return todo.completed;
+			});
+		};
+		
+		scope.activeItems = function() {
+			return $.grep(this.todos, function(todo, i) {
+				return !todo.completed;
+			});
+		};
+	};
+
+	TodoController.prototype.editTodoKeyPress = function(todo, e) {
+		if (e.which === ENTER_KEY) {
+			this.updateItem(todo);
+		} else if (e.which === ESCAPE_KEY) {
+			todo.$.apply(function() {
+				this.editing = false;
+				this.title = this.savedTitle;
+			});
 		}
 	};
 	
-	scope.completedItems = function() {
-		return $.grep(scope.todos, function(todo, i) {
-			return todo.completed;
+	TodoController.prototype.editItem = function(todo) {
+		todo.$.apply(function() {
+			this.editing = true;
+			this.savedTitle = this.title;
 		});
+		
+		$(todo.$.nodes()).find(".edit").focus();
 	};
 	
-	scope.activeItems = function() {
-		return $.grep(scope.todos, function(todo, i) {
-			return !todo.completed;
-		});
+	TodoController.prototype.updateItem = function(todo) {
+		console.log("UPDATE ITEM " + todo);
+		var title = todo.title.trim();
+		if ( title.length ) {
+			todo.title = title;
+			todo.savedTitle = title;
+			todo.editing = false;
+		} else {
+			this.removeItem(todo);
+		}
+		
+		this.$.apply();
 	};
 
-	scope.$addItem = function() {
+	TodoController.prototype.removeItem = function(todo) {
+		this.$.get("todos").splice(todo.$.index,1);
+		this.$.apply();
+	};
+
+	TodoController.prototype.addItem = function() {
+		var scope = this.$.scope();
 		var title = scope.newTodo.trim();
 		if ( title.length ) {
 			scope.todos.push(new Todo({title: title}));
@@ -111,16 +117,27 @@
 		}
 	};
 	
-	scope.$newTodoKeyPress = function(e, dom) {
+	TodoController.prototype.newTodoKeyPress = function(localScope, e, dom) {
 		if (e.which === ENTER_KEY) {
-			scope.$addItem();
+			this.$.fire("addItem");
 		}
 	};
 	
-	scope.$removeCompleted = function() {
+	TodoController.prototype.removeCompleted = function() {
+		var scope = this.$.scope();
 		scope.todos = scope.activeItems();
 		scope.$.apply();
 	};
+
+	TodoController.prototype.save = function() {
+		var scope = this.$.scope();
+		localStorage.setItem('todos-consistent.js', JSON.stringify({
+			todos : scope.todos
+		}));
+	};
+
+	// Initialise Consistent.js on the main DOM element
+	var scope = $("#todoapp").consistent(TodoController);
 
 	// Use the provided Flatiron Director for routing, since Consistent.js cares not one whit about routes.
 	Router({
@@ -135,13 +152,11 @@
 	scope.$.watch(function() {
 		if ( debounceTimer ) clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(function(){
-			localStorage.setItem('todos-consistent.js', JSON.stringify({
-				todos : scope.todos
-			}))
+			scope.$.fire("save");
 		}, 0);
 	});
 
 	// Apply the initial scope
 	scope.$.apply();
 
-})();
+})(window);
